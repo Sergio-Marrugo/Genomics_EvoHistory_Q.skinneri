@@ -1,0 +1,94 @@
+# Sergio Marrugo
+#April 2023
+#---
+#Filtering vcf (populations.snps.vcf) for Easysfs with vcftools
+#---
+
+#filters 1
+vcftools --vcf /media/biologianeotropical/Sergio_Genomics/Genomics_QS/All_samples/Genotypes/populations.snps.vcf --recode-INFO-all --remove remove_inds.txt --recode --out removed_missing
+
+vcftools --vcf removed_missing.recode.vcf --recode-INFO-all --max-alleles 2 --min-alleles 2 --minGQ 30 --max-missing 0.9 --recode --out preSFS
+
+#checking for mean depth per site
+vcftools --vcf preSFS.recode.vcf --site-mean-depth --out meandepthsfs
+less meandepthsfs.ldepth.mean
+cut -f3 meandepthsfs.ldepth.mean > meandepthsfs
+sed '1d' meandepthsfs > meandepthsfs1
+gnuplot << \EOF
+set terminal dumb size 120, 30
+set autoscale
+set xrange [10:150]
+unset label
+set title "Histogram of mean depth per site"
+set ylabel "Number of Occurrences"
+set xlabel "Mean Depth"
+binwidth=1
+bin(x,width)=width*floor(x/width) + binwidth/2.0
+set xtics 5
+plot 'meandepthsfs1' using (bin($1,binwidth)):(1.0) smooth freq with boxes
+pause -1
+EOF
+
+
+
+Histogram of mean depth per site
+                                             Histogram of mean depth per site                                         
+     9000 +---------------------------------------------------------------------------------------------------------+   
+          |   +   +  +   +   +   +   ****   +   +   +  +   +   +   +   +  +   +   +   +   +  +   +   +   +  +   +   |   
+          |                        ********                  'meandepthsfs1' using (bin($1,binwidth)):(1.0) ******* |   
+     8000 |-+                    **********                                                                       +-|   
+          |                      ***********                                                                        |   
+     7000 |-+                    ************                                                                     +-|   
+          |                    **************                                                                       |   
+          |                    **************                                                                       |   
+     6000 |-+                 *****************                                                                   +-|   
+          |                 *******************                                                                     |   
+     5000 |-+               ********************                                                                  +-|   
+          |                *********************                                                                    |   
+          |               ************************                                                                  |   
+     4000 |-+             ************************                                                                +-|   
+          |              **************************                                                                 |   
+     3000 |-+          *****************************                                                              +-|   
+          |           *******************************                                                               |   
+          |          ********************************                                                               |   
+     2000 |-+     ************************************                                                            +-|   
+          |      ***************************************                                                            |   
+     1000 |-+  *******************************************                                                        +-|   
+          |   **********************************************                                                        |   
+          | ********************************************************   +  +   +   +   +   +  +   +   +   +  +   +   |   
+        0 +---------------------------------------------------------------------------------------------------------+   
+          10  15  20 25  30  35  40  45 50  55  60  65 70  75  80  85  90 95 100 105 110 11 120 125 130 13 140 145 150  
+                                                          Mean Depth                                                    
+
+# R
+library(tidyr)
+setwd("/media/biologianeotropical/Sergio_Genomics/Genomics_QS/All_samples/EasySFS")
+x <- read.table("meandepthsfs1")
+> sd(as.double(x$V1))
+[1] 23.01038
+> median(as.double(x$V1))
+[1] 46.2581
+> mean(as.double(x$V1))
+[1] 46.62909
+
+#Mean and median are very similar
+# upper limit for filtering
+> ((sd(as.double(x$V1)))*2)+(mean(as.double(x$V1)))
+[1] 92.64984
+
+# Lower limit for filtering
+# 10 min-mean depth for quality, the distributions is not strongly skewed
+
+vcftools --vcf preSFS.recode.vcf --min-meanDP 10 --max-meanDP 93 --recode-INFO-all --recode--out Easysfs_ready
+
+create a Easysfs folder
+#convert vcf to plink formats (prunning not working directly from vcf)
+plink --vcf Easysfs_ready.recode.vcf --make-bed --allow-extra-chr --recode --out pre_plink.recode
+#Run indep stepwise r2 0.5
+plink --bfile pre_plink --double-id --allow-extra-chr --set-missing-var-ids @:# --indep-pairwise 50 10 0.5 --out Pruned_SNP
+
+#Remove linked with .prune.in file
+plink --bfile pre_plink --double-id --allow-extra-chr --recode --set-missing-var-ids @:# --extract Pruned_SNP.prune.in --make-bed --out unlinked_for_EasySFS
+
+#Convert .bed file back to vcf
+plink --bfile unlinked_for_EasySFS --allow-extra-chr --recode vcf

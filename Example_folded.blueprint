@@ -1,0 +1,25 @@
+#example blueprint file
+#input setting
+popid: CHA_F # id of the population (no white space)
+nseq: 16 # number of sequences
+L: 12962579 # total number of observed nucleic sites, including polymorphic and monomorphic
+whether_folded: true # whether the SFS is folded (true or false)
+SFS: 25786.38644650846 15611.27657378747 10762.21775025808 7974.202270381888 6681.454489164104 6010.006123151014 5841.433092535277 2906.461300309597 # snp frequency spectrum: number of singleton, number of doubleton, etc. (separated by white space)
+#smallest_size_of_SFS_bin_used_for_estimation: 1 # default is 1; to ignore singletons, uncomment this line and change this number to 2
+#largest_size_of_SFS_bin_used_for_estimation:  # default is n-1; to ignore singletons, uncomment this line and change this number to nseq-2
+pct_training: 0.67 # percentage of sites for training
+nrand: 6	8	10	14 # number of random break points for each try (separated by white space)
+project_dir: CHA_F # project directory
+stairway_plot_dir: stairway_plot_es # directory to the stairway plot files
+ninput: 200 # number of input files to be created for each estimation
+#random_seed: 6
+#output setting
+mu:  1.01e-8  # assumed mutation rate per site per generation
+year_per_generation: 50 # assumed generation time (in years)
+#plot setting
+plot_title: CHA_Folded # title of the plot
+xrange: 0.1,10000 # Time (1k year) range; format: xmin,xmax; "0,0" for default
+yrange: 0,0 # Ne (1k individual) range; format: xmin,xmax; "0,0" for default
+xspacing: 2 # X axis spacing
+yspacing: 2 # Y axis spacing
+fontsize: 12 # Font size
