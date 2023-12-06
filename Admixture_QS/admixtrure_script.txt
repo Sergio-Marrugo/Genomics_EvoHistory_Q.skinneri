@@ -1,0 +1,40 @@
+admixture Quercus skinneri STACKS
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf /media/biologianeotropical/Sergio_Genomics/Genomics_QS/All_samples/Genotypes/pre_plink.recode.vcf --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.5 --out Pruned_SNP
+
+# prune and create pca
+plink --vcf /media/biologianeotropical/Sergio_Genomics/Genomics_QS/All_samples/Genotypes/pre_plink.recode.vcf --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract Pruned_SNP.prune.in \
+--make-bed --out skinneriAdmix
+
+FILE=skinneriAdmix
+
+# ADMIXTURE does not accept chromosome names that are not human chromosomes. We will thus just exchange the first column by 0
+awk '{$1="0";print $0}' $FILE.bim > $FILE.bim.tmp
+mv $FILE.bim.tmp $FILE.bim
+
+#produce first inputs with ADMIXTURE k from 2 to 9, -cv default = 5
+for i in {2..9}; do admixture --cv=10 $FILE.bed $i > log${i}.out; done
+
+# We can create a file with the CV errors using the next COMMAND
+grep "CV" *out | awk '{print $3,$4}' | cut -c 4,7-20 > $FILE.cv.error
+
+#best cv for k=5 0.31372, followed by K=6 0.31731
+
+
+
+#let's use k=5 .Q file to plot ADMIXTURE
+sed 's/\t[A-Z]*//g' popmap_localities.txt > inds_names.txt
+#paste that list to the k=5 y 6 .Q FILE, remove from ind_names > 10% missing: NIQ_6, NIQ_7
+paste inds_names.txt skinneriAdmix.5.Q > K5_Q_to_plot
+paste inds_names.txt skinneriAdmix.6.Q > K6_Q_to_plot
+
+#Now let's move to R
+wget https://github.com/speciationgenomics/scripts/raw/master/plotADMIXTURE.r
+chmod +x plotADMIXTURE.r
+
+Rscript plotADMIXTURE.r -p skinneriAdmix -i inds_pops.txt -k 6 -l CAR,CHM,PAC,SMC,TUX,SNO
+

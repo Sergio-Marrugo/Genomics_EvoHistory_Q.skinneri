@@ -1,0 +1,118 @@
+#Filtering options for fineRADstructure dataset
+#Sergio Marrugo
+# 13 July 2023
+
+#----
+#Goal: create dataset with linkage information to use in fineRADstructure analyses
+# using vcftools to filter SNP data
+#---
+
+#--- input data: populations.snps.vcf contains 600 k+ variant sites from the STACKS pipeline
+
+#Let's try another filtering exercise with only 10% missing data (call rate) and apply to this dataset additional filters outside vcftools for analyses-ready vcf
+# which will correspond to extremely high depth loci and H-W if in all populations
+# MAC = 5 instead of MAF will be used
+#removing high missing data individuals and high missing data loci should be done after filtering for min and mean read depths
+
+
+conda activate vcf_env
+vcftools --vcf /media/biologianeotropical/Sergio_Genomics/Genomics_QS/All_samples/Genotypes/populations.snps.vcf --min-alleles 2 --max-alleles 2 --mac 5 --min-meanDP 15 --minGQ 30 --minDP 10 --recode --recode-INFO-all --out temp1_data
+
+#Remove inds with bad sequencing 
+vcftools --vcf temp1_data.recode.vcf --remove remove_inds.txt --recode --recode-INFO-all -out temp2_data
+
+
+# max missing 10%
+
+vcftools --vcf temp2_data.recode.vcf --max-missing 0.9 --recode --recode-INFO-all --out missing10
+
+#let's check for proportion of missing data in individuals and remove samples with > 20% missing data
+
+vcftools --vcf missing10.recode.vcf --missing-indv --out missing10-inds
+less missing10-inds.imiss
+
+#individual SKC contains 21% missing data we can remove it --remove; remove_inds2.txt list SKC_4, TPC_8 and POC_7
+vcftools --vcf missing10.recode.vcf --remove remove_inds2.txt --recode --recode-INFO-all --out missing10_removed
+
+#in the next steps we are going to (i) eliminate extremely high depth loci, and last (iii) out of H-W eq. loci shared shared among all populations
+
+(i) High depth LOCI
+# create a list of the depth of each loci
+cut -f8 missing10_removed.recode.vcf | grep -oe "DP=[0-9]*" | sed -s 's/DP=//g' > missing10.DEPTH
+
+#Calculate mean depths
+mawk '{ sum += $1; n++ } END { if (n > 0) print sum / n; }' missing10.DEPTH
+
+# Mean depth per site
+mawk '!/D/' missing10.DEPTH | mawk -v x=90 '{print $1/x}' > meandepthpersite
+
+#Plot mean depth
+
+gnuplot << \EOF
+set terminal dumb size 120, 30
+set autoscale
+set xrange [10:150]
+unset label
+set title "Histogram of mean depth per site"
+set ylabel "Number of Occurrences"
+set xlabel "Mean Depth"
+binwidth=1
+bin(x,width)=width*floor(x/width) + binwidth/2.0
+set xtics 5
+plot 'meandepthpersite' using (bin($1,binwidth)):(1.0) smooth freq with boxes
+pause -1
+EOF
+
+#Remove --max-meanDP 100
+vcftools --vcf missing10_removed.recode.vcf --max-meanDP 150 --recode --recode-INFO-all --out preHW_data
+
+# Now we will apply a H-We filter, to remove variants that are out of H-We in every population
+
+# First download the perl script designed for this purposes
+
+curl -L -O https://github.com/jpuritz/dDocent/raw/master/scripts/filter_hwe_by_pop.pl
+chmod +x filter_hwe_by_pop.pl
+
+./filter_hwe_by_pop.pl
+ Usage:
+     filter_hwe_by_pop.pl -v <vcffile> -p <popmap> [options]
+
+     Options: -v <vcffile> input vcf file -p <popmap> tab-separated file of
+     samples and population designations -h [hwe] minimum Hardy-Weinberg
+     p-value cutoff for SNPs -c [cutoff] proportion of all populations that a
+     locus can be below HWE cutoff without being filtered -o [out] name of
+     outfile
+
+ Options:
+     -v, --vcffile
+             VCF input file
+
+     -p, --popmap
+             File with names of individuals and population designations, one
+             per line
+
+     -h, --hwe
+             Minimum cutoff for Hardy-Weinberg p-value (for test as
+             implemented in vcftools) [Default: 0.001]
+
+     -c, --cutoff
+             Proportion of all populations that a locus can be below HWE
+             cutoff without being filtered. For example, choosing 0.5 will
+             filter SNPs that are below the p-value threshold in 50% or more
+             of the populations. [Default: 0.25]
+
+     -o, --out
+             Name of outfile, by vcftools conventions (will be named
+             X.recode.vcf)
+
+             # If your dataset contains indels then remove them with vcftools.
+             # Create a population map, first column sample name and second column population initials (no header required)
+             # Removing out of H-W LOCI
+             # activate vcftools environment in conda before executing
+
+
+
+             ./filter_hwe_by_pop.pl -v preHW_data.recode.vcf -p popmap_localities.txt -o filteredSNP_fineRAD -h 0.005 -c 0.95
+             
+
+# No variants were removed, no HW loci shared among all localities

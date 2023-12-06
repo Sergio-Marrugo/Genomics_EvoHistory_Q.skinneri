@@ -1,0 +1,28 @@
+# Installing and Executing fineRADstructure
+#Sergio Marrugo
+13 July 2023
+#---
+#Goal: Installing and running fineRADstructure
+#---
+
+#Input data filteredSNP_fineRAD.recode.vcf
+
+# We have to convert VCF file to RAD file with hapsFromVCF
+RADpainter hapsFromVCF filteredSNP_fineRAD.recode.vcf > Haplotypes_RAD.txt
+
+# Calculate co-ancestry matrix
+RADpainter paint Haplotypes_RAD.txt
+
+#Assign inds to pops (We had to download and install finestructure into the computer)
+/home/biologianeotropical/bin/fs fs -x 100000 -y 100000 -z 1000 Haplotypes_RAD_chunks.out Haplotypes_RAD_chunks.mcmc.xml
+
+# Tree building
+/home/biologianeotropical/bin/fs fs -m T -x 10000 Haplotypes_RAD_chunks.out Haplotypes_RAD_chunks.mcmc.xml Haplotypes_RAD_chunks.mcmcTree.xml
+
+#plotting the results
+# We'll follow the instructions of the script in https://github.com/millanek/fineRADstructure/blob/master/fineRADstructurePlot.R
+# Download the repository
+git clone https://github.com/millanek/fineRADstructure.git
+# we will upload the path to FinestructureLibrary.R in R
+
+#Go follow the R script!

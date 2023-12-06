@@ -1,0 +1,145 @@
+#Plink_PCA
+#Guide https://speciationgenomics.github.io/pca/
+
+# move to your home directory
+cd ~
+# make a plink directory
+mkdir plink
+# move into it
+cd plink
+VCF=/media/biologianeotropical/Sergio_Genomics/Genomics_QS/All_samples/Genotypes/pre_plink.recode.vcf
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf $VCF --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.5 --out Pruned_SNP
+
+# prune and create pca
+plink --vcf $VCF --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract Pruned_SNP.prune.in \
+--make-bed --pca --out all_samplesPCA
+
+#convert back bed file to vcf (To use in SNAPP)
+plink --bfile all_samplesPCA --recode vcf --allow-extra-chr --out unlinked_SNAPP
+
+#change name duplication
+
+sed 's/_[A-Z]*_[0-9]*//g' unlinked_SNAPP.vcf > temp1.vcf 
+less temp1.vcf
+mv temp1.vcf unlinked_SNAPP.vcf
+
+#Now lets move to R studio
+# load tidyverse package
+library(tidyverse)
+
+# read in data
+pca <- read.table("./all_samplesPCA.eigenvec", col_names = FALSE)
+eigenval <- scan("./all_samplesPCA.eigenval")
+
+# sort out the pca data
+# remove nuisance column
+pca <- pca[,-1]
+# set names
+names(pca)[1] <- "ind"
+names(pca)[2:ncol(pca)] <- paste0("PC", 1:(ncol(pca)-1))
+
+
+# sort out the individual pops
+# location
+loc <- rep(NA, length(pca$ind))
+loc[grep("CHA", pca$ind)] <- "Chayotepec"
+loc[grep("COCH", pca$ind)] <- "Cofradiachm"
+loc[grep("GDH", pca$ind)] <- "Guevea"
+loc[grep("LAC", pca$ind)] <- "lashiguxe2"
+loc[grep("LOTO", pca$ind)] <- "tux1"
+loc[grep("SAC", pca$ind)] <- "San_antoniochm"
+loc[grep("SBH", pca$ind)] <- "Honduras"
+loc[grep("SIL", pca$ind)] <- "lashiguxe1"
+loc[grep("SKC", pca$ind)] <- "tux2"
+loc[grep("NIQ", pca$ind)] <- "Niquivil"
+loc[grep("TPC", pca$ind)] <- "Tres_picos"
+loc[grep("COB", pca$ind)] <- "Coban"
+loc[grep("POC", pca$ind)] <- "Pochutla"
+loc[grep("YAJ", pca$ind)] <- "Yajalon"
+
+# combine - if you want to plot each in different colours
+spp_loc <- paste0(spp, "_", loc)
+
+# remake data.frame
+pca <- as_tibble(data.frame(pca, loc))
+
+# first convert to percentage variance explained
+pve <- data.frame(PC = 1:20, pve = eigenval/sum(eigenval)*100)
+
+# plot pca
+b <- ggplot(pca, aes(PC1, PC2, col = loc)) + geom_point(size = 2)
+b <- b + scale_colour_manual(values = c("red", "blue", "orange", "yellow", "purple", "green", "magenta", "cyan", "pink", "black", "beige", "aquamarine", "coral3", "darkseagreen" ))
+b <- b + coord_equal() + theme_light()
+b + xlab(paste0("PC1 (", signif(pve$pve[1], 3), "%)")) + ylab(paste0("PC2 (", signif(pve$pve[2], 3), "%)"))
+
+# NOW LETS RUN A PCA of inds from CHM, SNO and TUX
+# make a plink directory
+mkdir Western_pops
+# move into it
+cd Western_pops
+VCF=/media/biologianeotropical/Sergio_Genomics/Genomics_QS/All_samples/Genotypes/pre_plink.recode.vcf
+
+#remove individuals from honduras with VCFTOOLS
+# list inds to filter hond_names.txt
+vcftools --vcf $VCF --keep 'popmap_westernlocalities.txt' --recode --recode-INFO-all --out Western_SNPs
+
+# conda deactivate
+#conda activate plink_env
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf Western_SNPs.recode.vcf --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out Western_unlinkedSNP
+
+# prune and create pca
+plink --vcf Western_SNPs.recode.vcf --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract Western_unlinkedSNP.prune.in \
+--make-bed --pca --out skinneriPCA_Western
+
+#Now let's go to R again
+library(tidyverse)
+
+# read in data
+pca <- read_table2("./skinneriPCA_Western.eigenvec", col_names = FALSE)
+eigenval <- scan("./skinneriPCA_Western.eigenval")
+
+# sort out the pca data
+# remove nuisance column
+pca <- pca[,-1]
+# set names
+names(pca)[1] <- "ind"
+names(pca)[2:ncol(pca)] <- paste0("PC", 1:(ncol(pca)-1))
+
+# sort out the individual pops
+# location
+Locality <- rep(NA, length(pca$ind))
+Locality[grep("CHA", pca$ind)] <- "Chayotepec"
+Locality[grep("COCH", pca$ind)] <- "Cofradia"
+Locality[grep("GDH", pca$ind)] <- "Guevea"
+Locality[grep("LAC", pca$ind)] <- "Lashiguxe2"
+Locality[grep("LOTO", pca$ind)] <- "Tuxtlas1"
+Locality[grep("SAC", pca$ind)] <- "San_Antonio"
+Locality[grep("SIL", pca$ind)] <- "Lashiguxe1"
+Locality[grep("SKC", pca$ind)] <- "Tuxtlas2"
+
+# remake data.frame
+pca <- as_tibble(data.frame(pca, Locality))
+
+# first convert to percentage variance explained
+pve <- data.frame(PC = 1:20, pve = eigenval/sum(eigenval)*100)
+
+# make plot
+a <- ggplot(pve, aes(PC, pve)) + geom_bar(stat = "identity")
+a + ylab("Percentage variance explained") + theme_light()
+
+
+# plot pca
+b <- ggplot(pca2, aes(PC1, PC2, col = loc)) + geom_point(size = 3)
+b <- b + scale_colour_manual(values = c("red", "blue", "orange", "yellow", "purple", "green", "magenta", "cyan"))
+b <- b + coord_equal() + theme_light()
+b + xlab(paste0("PC1 (", signif(pve$pve[1], 3), "%)")) + ylab(paste0("PC2 (", signif(pve$pve[2], 3), "%)"))

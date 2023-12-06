@@ -1,0 +1,50 @@
+#Filtering Cleaning SNP data from STACKS (Same protocol as in ipyrad)
+
+conda activate vcf_env
+#use minGQ instead of snp quality
+vcftools --vcf populations.snps.vcf --min-alleles 2 --max-alleles 2 --mac 3 --min-meanDP 15 --minGQ 30 --minDP 10 --recode --recode-INFO-all --out no-thinning
+
+#thin in order to have 1 SNP per LOCI and retain max missing 10%
+vcftools --vcf no-thinning.recode.vcf --thin 200 --max-missing 0.9 --recode --recode-INFO-all --out missing10
+
+#let's check for proportion of missing data in individuals and remove samples with > 20% missing data
+
+vcftools --vcf missing10.recode.vcf --missing-indv --out missing10-inds
+less missing10-inds.imiss
+
+#individuals POC_1, POC_4, POC_8, TPC_5, NIQ_6 y NIQ_7 have significantly higher than 20% missing data, they must be removed from further analyses, ind TPC_8 has 21% missing data, to bear in mind
+
+vcftools --vcf missing10.recode.vcf --remove remove_inds.txt --recode --recode-INFO-all --out missing10_removed
+
+#Let's check mean depth per individual
+vcftools --vcf missing10_removed.recode.vcf --depth --out mean_ind
+less mean_ind.Idepth
+#NIQ_6 and NIQ have 5.9 and 6.6 mean depth respectively (bear in mind for demographic inference)
+
+#in the next steps we are going to (i) eliminate extremely high depth loci, (iii) out of H-W eq. loci shared shared among all populations
+
+(i) High depth LOCI
+vcftools --vcf missing10_removed.recode.vcf --site-mean-depth --out sites_depth
+less sites_depth.ldepth.mean
+
+awk '{s+=$3}END{print s}'sites_depth.ldepth.mean 
+1233110 > sites_sum
+wc -l sites_depth.ldepth.mean
+value-1 > total_sites
+# mean depth per site
+sites_sum/total_sites 
+var1=1233110
+var2=24147
+echo "scale=2 ; $var1 / $var2" | bc
+51.6x of mean depth
+#max mean depth 3times the mean = 150 X
+
+vcftools --vcf missing10_removed.recode.vcf --max-meanDP 150 --recode --recode-INFO-all --out missing10noHWE
+
+# Now we will apply a H-We filter, to remove variants that are out of H-We in every population
+
+# First download the perl script designed for this purposes (keep vcftools env)
+
+curl -L -O https://github.com/jpuritz/dDocent/raw/master/scripts/filter_hwe_by_pop.pl
+chmod +x filter_hwe_by_pop.pl
+./filter_hwe_by_pop.pl -v missing10noHWE.recode.vcf -p popmap_localities.txt -o filtered_stacks -h 0.005 -c 0.95
